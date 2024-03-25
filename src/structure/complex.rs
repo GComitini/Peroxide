@@ -1,7 +1,7 @@
-use num_complex::Complex;
 use crate::traits::fp::FPVector;
-use crate::traits::math::{Vector, Normed, Norm, InnerProduct};
+use crate::traits::math::{InnerProduct, Norm, Normed, Vector};
 use crate::traits::sugar::VecOps;
+use num_complex::Complex;
 
 pub type C64 = Complex<f64>;
 
@@ -33,7 +33,8 @@ impl Normed for Complex<f64> {
 
     fn normalize(&self, kind: Norm) -> Self
     where
-            Self: Sized {
+        Self: Sized,
+    {
         let n = self.norm(kind);
         self / n
     }
@@ -50,26 +51,33 @@ impl FPVector for Vec<Complex<f64>> {
 
     fn fmap<F>(&self, f: F) -> Self
     where
-            F: Fn(Self::Scalar) -> Self::Scalar {
+        F: Fn(Self::Scalar) -> Self::Scalar,
+    {
         self.iter().map(|&x| f(x)).collect()
     }
 
     fn zip_with<F>(&self, f: F, other: &Self) -> Self
     where
-            F: Fn(Self::Scalar, Self::Scalar) -> Self::Scalar {
-        self.iter().zip(other.iter()).map(|(&x, &y)| f(x,y)).collect()
+        F: Fn(Self::Scalar, Self::Scalar) -> Self::Scalar,
+    {
+        self.iter()
+            .zip(other.iter())
+            .map(|(&x, &y)| f(x, y))
+            .collect()
     }
 
     fn reduce<F, T>(&self, init: T, f: F) -> Self::Scalar
     where
-            F: Fn(Self::Scalar, Self::Scalar) -> Self::Scalar,
-            T: Into<Self::Scalar> {
-        self.iter().fold(init.into(), |x, &y| f(x,y))
+        F: Fn(Self::Scalar, Self::Scalar) -> Self::Scalar,
+        T: Into<Self::Scalar>,
+    {
+        self.iter().fold(init.into(), |x, &y| f(x, y))
     }
 
     fn filter<F>(&self, f: F) -> Self
     where
-            F: Fn(Self::Scalar) -> bool {
+        F: Fn(Self::Scalar) -> bool,
+    {
         self.into_iter().filter(|&x| f(*x)).map(|&t| t).collect()
     }
 
@@ -112,13 +120,14 @@ impl Normed for Vec<Complex<f64>> {
     fn norm(&self, kind: Norm) -> Self::UnsignedScalar {
         match kind {
             Norm::L1 => self.iter().map(|x| Complex::<f64>::norm(*x).abs()).sum(),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 
-    fn normalize(&self, kind: Norm) -> Self
+    fn normalize(&self, _kind: Norm) -> Self
     where
-            Self: Sized {
+        Self: Sized,
+    {
         unimplemented!()
     }
 }

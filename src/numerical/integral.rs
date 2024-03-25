@@ -1,3 +1,4 @@
+use crate::structure::complex::C64;
 use crate::structure::polynomial::{lagrange_polynomial, Calculus};
 use crate::traits::fp::FPVector;
 use crate::util::non_macro::seq;
@@ -166,7 +167,18 @@ where
     match method {
         Integral::GaussLegendre(n) => gauss_legendre_quadrature(f, n, (a, b)),
         Integral::NewtonCotes(n) => newton_cotes_quadrature(f, n, (a, b)),
-        method => gauss_kronrod_quadrature(f, (a,b), method),
+        method => gauss_kronrod_quadrature(f, (a, b), method),
+    }
+}
+
+pub fn complex_integrate<F>(f: F, (a, b): (f64, f64), method: Integral) -> C64
+where
+    F: Fn(f64) -> C64 + Copy,
+{
+    match method {
+        Integral::GaussLegendre(n) => complex_gauss_legendre_quadrature(f, n, (a, b)),
+        Integral::NewtonCotes(n) => complex_newton_cotes_quadrature(f, n, (a, b)),
+        method => complex_gauss_kronrod_quadrature(f, (a, b), method),
     }
 }
 
@@ -182,6 +194,27 @@ where
     let q = p.integral();
 
     q.eval(b) - q.eval(a)
+}
+
+pub fn complex_newton_cotes_quadrature<F>(f: F, n: usize, (a, b): (f64, f64)) -> C64
+where
+    F: Fn(f64) -> C64,
+{
+    let h = (b - a) / (n as f64);
+    let node_x = seq(a, b, h);
+    let node_y: Vec<C64> = node_x.iter().map(|&z| f(z)).collect();
+
+    let node_y_re = node_y.iter().map(|&w| w.re).collect();
+    let p_re = lagrange_polynomial(node_x.clone(), node_y_re);
+    let q_re = p_re.integral();
+    let res_re = q_re.eval(b) - q_re.eval(a);
+
+    let node_y_im = node_y.iter().map(|&w| w.im).collect();
+    let p_im = lagrange_polynomial(node_x, node_y_im);
+    let q_im = p_im.integral();
+    let res_im = q_im.eval(b) - q_im.eval(a);
+
+    res_re + C64::i() * res_im
 }
 
 /// Gauss Legendre Quadrature
@@ -202,6 +235,14 @@ where
     (b - a) / 2f64 * unit_gauss_legendre_quadrature(|x| f(x * (b - a) / 2f64 + (a + b) / 2f64), n)
 }
 
+pub fn complex_gauss_legendre_quadrature<F>(f: F, n: usize, (a, b): (f64, f64)) -> C64
+where
+    F: Fn(f64) -> C64,
+{
+    (b - a) / 2f64
+        * complex_unit_gauss_legendre_quadrature(|x| f(x * (b - a) / 2f64 + (a + b) / 2f64), n)
+}
+
 /// Gauss Kronrod Quadrature
 ///
 /// # Type
@@ -217,9 +258,9 @@ where
 #[allow(non_snake_case)]
 pub fn gauss_kronrod_quadrature<F, T, S>(f: F, (a, b): (T, S), method: Integral) -> f64
 where
-     F: Fn(f64) -> f64 + Copy,
-     T: Into<f64>,
-     S: Into<f64>,
+    F: Fn(f64) -> f64 + Copy,
+    T: Into<f64>,
+    S: Into<f64>,
 {
     let (g, k) = method.get_gauss_kronrod_order();
     let tol = method.get_tol();
@@ -234,11 +275,7 @@ where
                 let G = gauss_legendre_quadrature(f, g as usize, (a, b));
                 let K = kronrod_quadrature(f, k as usize, (a, b));
                 let c = (a + b) / 2f64;
-                let tol_curr = if method.is_relative() {
-                    tol * G
-                } else {
-                    tol
-                };
+                let tol_curr = if method.is_relative() { tol * G } else { tol };
                 if (G - K).abs() < tol_curr || a == b || max_iter == 0 {
                     I += G;
                 } else {
@@ -252,11 +289,56 @@ where
     I
 }
 
-pub fn kronrod_quadrature<F>(f: F, n: usize, (a, b): (f64, f64)) -> f64 
+#[allow(non_snake_case)]
+pub fn complex_gauss_kronrod_quadrature<F, T, S>(f: F, (a, b): (T, S), method: Integral) -> C64
+where
+    F: Fn(f64) -> C64 + Copy,
+    T: Into<f64>,
+    S: Into<f64>,
+{
+    let (g, k) = method.get_gauss_kronrod_order();
+    let tol = method.get_tol();
+    let max_iter = method.get_max_iter();
+    let mut I = C64::new(0., 0.);
+    let mut S: Vec<(f64, f64, f64, u32)> = vec![];
+    S.push((a.into(), b.into(), tol, max_iter));
+
+    loop {
+        match S.pop() {
+            Some((a, b, tol, max_iter)) => {
+                let G = complex_gauss_legendre_quadrature(f, g as usize, (a, b));
+                let K = complex_kronrod_quadrature(f, k as usize, (a, b));
+                let c = (a + b) / 2f64;
+                let tol_curr = if method.is_relative() {
+                    (tol * G).norm()
+                } else {
+                    tol
+                };
+                if (G - K).norm() < tol_curr || a == b || max_iter == 0 {
+                    I += G;
+                } else {
+                    S.push((a, c, tol / 2f64, max_iter - 1));
+                    S.push((c, b, tol / 2f64, max_iter - 1));
+                }
+            }
+            None => break,
+        }
+    }
+    I
+}
+
+pub fn kronrod_quadrature<F>(f: F, n: usize, (a, b): (f64, f64)) -> f64
 where
     F: Fn(f64) -> f64,
 {
-    (b - a) / 2f64 * unit_kronrod_quadrature(|x| f(x * (b-a) / 2f64 + (a + b) / 2f64), n)   
+    (b - a) / 2f64 * unit_kronrod_quadrature(|x| f(x * (b - a) / 2f64 + (a + b) / 2f64), n)
+}
+
+pub fn complex_kronrod_quadrature<F>(f: F, n: usize, (a, b): (f64, f64)) -> C64
+where
+    F: Fn(f64) -> C64,
+{
+    (b - a) / 2f64 * complex_unit_kronrod_quadrature(|x| f(x * (b - a) / 2f64 + (a + b) / 2f64), n)
 }
 
 // =============================================================================
@@ -268,6 +350,18 @@ where
 {
     let (a, x) = gauss_legendre_table(n);
     let mut s = 0f64;
+    for i in 0..a.len() {
+        s += a[i] * f(x[i]);
+    }
+    s
+}
+
+fn complex_unit_gauss_legendre_quadrature<F>(f: F, n: usize) -> C64
+where
+    F: Fn(f64) -> C64,
+{
+    let (a, x) = gauss_legendre_table(n);
+    let mut s = C64::new(0., 0.);
     for i in 0..a.len() {
         s += a[i] * f(x[i]);
     }
@@ -379,9 +473,21 @@ fn unit_kronrod_quadrature<F>(f: F, n: usize) -> f64
 where
     F: Fn(f64) -> f64,
 {
-    let (a,x) = kronrod_table(n);
+    let (a, x) = kronrod_table(n);
     let mut s = 0f64;
-    for i in 0 .. a.len() {
+    for i in 0..a.len() {
+        s += a[i] * f(x[i]);
+    }
+    s
+}
+
+fn complex_unit_kronrod_quadrature<F>(f: F, n: usize) -> C64
+where
+    F: Fn(f64) -> C64,
+{
+    let (a, x) = kronrod_table(n);
+    let mut s = C64::new(0., 0.);
+    for i in 0..a.len() {
         s += a[i] * f(x[i]);
     }
     s
@@ -411,28 +517,28 @@ fn kronrod_table(n: usize) -> (Vec<f64>, Vec<f64>) {
 
     match n % 2 {
         0 => {
-            for i in 0 .. ref_node.len() {
+            for i in 0..ref_node.len() {
                 result_node[i] = ref_node[i];
                 result_weight[i] = ref_weight[i];
             }
 
-            for i in ref_node.len() .. n {
-                result_node[i] = -ref_node[n-i-1];
-                result_weight[i] = ref_weight[n-i-1];
+            for i in ref_node.len()..n {
+                result_node[i] = -ref_node[n - i - 1];
+                result_weight[i] = ref_weight[n - i - 1];
             }
         }
         1 => {
-            for i in 0 .. ref_node.len() {
+            for i in 0..ref_node.len() {
                 result_node[i] = ref_node[i];
                 result_weight[i] = ref_weight[i];
             }
 
-            for i in ref_node.len() .. n {
-                result_node[i] = -ref_node[n-i];
-                result_weight[i] = ref_weight[n-i];
+            for i in ref_node.len()..n {
+                result_node[i] = -ref_node[n - i];
+                result_weight[i] = ref_weight[n - i];
             }
         }
-        _ => unreachable!()
+        _ => unreachable!(),
     }
     (result_weight, result_node)
 }
@@ -919,7 +1025,7 @@ const LEGENDRE_WEIGHT_25: [f64; 13] = [
     0.054904695975835192,
     0.040939156701306313,
     0.026354986615032137,
-    0.011393798501026288,    
+    0.011393798501026288,
 ];
 const LEGENDRE_WEIGHT_26: [f64; 13] = [
     0.118321415279262277,
