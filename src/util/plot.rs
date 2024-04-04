@@ -3,83 +3,51 @@
 //! For Rust, there are some plot libraries but, still difficult to use.
 //! Practically, using python is best choice to plot. And there is awesome crate - [pyo3](https://crates.io/crates/pyo3).
 //!
-//! Let's see next ordinary code file.
+//! # Prerequisite
 //!
-//! ```no-run
-//! #[macro_use]
-//! extern crate peroxide;
+//! - python 3
+//! - matplotlib
+//! - scienceplots (Optional)
+//!
+//! # Usage
+//!
+//! To use this module, you should enable `plot` feature in `Cargo.toml`
+//!
+//! ```
 //! use peroxide::fuga::*;
 //!
 //! fn main() {
-//!     let init_state = State::<f64>::new(0f64, c!(1), c!(0));
+//!     let x = linspace(0, 1, 100);
+//!     let y1 = x.fmap(|t| t.powi(2));
+//!     let y2 = x.fmap(|t| t.powi(3));
 //!
-//!     let mut ode_solver = ExplicitODE::new(test_fn);
+//!     let normal = Normal(0f64, 0.1);
+//!     let eps = normal.sample(100);
+//!     let y3 = y2.add_v(&eps);
 //!
-//!     ode_solver
-//!         .set_method(ExMethod::RK4)
-//!         .set_initial_condition(init_state)
-//!         .set_step_size(0.01)
-//!         .set_times(1000);
-//!
-//!     let result = ode_solver.integrate();
-//!     result.write("example_data/test.csv");
-//! }
-//!
-//! fn test_fn(st: &mut State<f64>, _: &NoEnv) {
-//!     let x = st.param;
-//!     let y = &st.value;
-//!     let dy = &mut st.deriv;
-//!     dy[0] = (5f64*x.powi(2) - y[0]) / (x + y[0]).exp();
-//! }
-//! ```
-//!
-//! Now, let's modify this code to below. Then it works surprisingly!
-//!
-//! ```rust
-//! #[macro_use]
-//! extern crate peroxide;
-//! use peroxide::fuga::*;
-//!
-//! fn main() {
-//!     let init_state = State::<f64>::new(0f64, c!(1), c!(0));
-//!
-//!     let mut ode_solver = ExplicitODE::new(test_fn);
-//!
-//!     ode_solver
-//!         .set_method(ExMethod::RK4)
-//!         .set_initial_condition(init_state)
-//!         .set_step_size(0.01)
-//!         .set_times(1000);
-//!
-//!     let result = ode_solver.integrate();
-//!
-//!     let x = result.col(0);
-//!     let y = result.col(1);
-//!
-//!     // Remove below comments to execute
-//!     //let mut plt = Plot2D::new();
-//!     //plt.set_domain(x)
-//!     //    .insert_image(y)
-//!     //    .set_title("Test Figure")
-//!     //    .set_fig_size((10, 6))
-//!     //    .set_dpi(300)
-//!     //    .set_legend(vec!["RK4"])
-//!     //    .set_path("example_data/test_plot.png");
-//!
-//!     //plt.savefig();
-//! }
-//!
-//! fn test_fn(st: &mut State<f64>, _: &NoEnv) {
-//!     let x = st.param;
-//!     let y = &st.value;
-//!     let dy = &mut st.deriv;
-//!     dy[0] = (5f64 * x.powi(2) - y[0]) / (x + y[0]).exp();
+//!     let mut plt = Plot2D::new();
+//!     plt.set_domain(x)
+//!         .insert_image(y1)
+//!         .insert_image(y2)
+//!         .insert_image(y3)
+//!         .set_legend(vec![r"$y=x^2$", r"$y=x^3$", r"$y=x^2 + \epsilon$"])
+//!         .set_line_style(vec![(0, LineStyle::Dashed), (1, LineStyle::Dotted)])
+//!         .set_plot_type(vec![(2, PlotType::Scatter)])
+//!         .set_marker(vec![(2, Markers::Point)])
+//!         .set_color(vec![(0, "red"), (1, "darkblue"), (2, "olive")])
+//!         .set_xlabel(r"$x$")
+//!         .set_ylabel(r"$y$")
+//!         .set_style(PlotStyle::Nature) // if you want to use scienceplots
+//!         .set_dpi(600)
+//!         .tight_layout()
+//!         .set_path("example_data/test_plot.png")
+//!         .savefig().unwrap();
 //! }
 //! ```
 //!
-//! It draws next image
+//! This code will generate below plot
 //!
-//! ![test_plot](https://raw.githubusercontent.com/Axect/Peroxide/master/example_data/test_plot.png)
+//! ![test_plot](https://github.com/Axect/Peroxide/blob/master/example_data/test_plot.png?raw=true)
 //!
 //! # Available Plot Options
 //! - `set_domain` : Set x data
@@ -102,8 +70,9 @@
 //! - `set_style` : Set style of plot (`PlotStyle::Nature`, `PlotStyle::IEEE`, `PlotStyle::Default` (default), `PlotStyle::Science`)
 //! - `tight_layout` : Set tight layout of plot (optional)
 //! - `set_line_style` : Set line style of plot (optional; `LineStyle::{Solid, Dashed, Dotted, DashDot}`)
-//! - `set_color` : Set color of plot (optional; Vec<&str>)
-//! - `set_alpha` : Set alpha of plot (optional; Vec<f64>)
+//! - `set_color` : Set color of plot (optional; Vec<(usize, &str)>)
+//! - `set_alpha` : Set alpha of plot (optional; Vec<(usize, f64)>)
+//! - `set_plot_type` : Set plot type of plot (optional; `PlotType::{Scatter, Line, Bar}`)
 //! - `savefig` : Save plot with given path
 
 extern crate pyo3;
@@ -128,7 +97,6 @@ pub enum PlotOptions {
 #[derive(Debug, Copy, Clone, Hash, PartialOrd, PartialEq, Eq)]
 pub enum Markers {
     Point,
-    Line,
     Circle,
     Pixel,
     TriangleDown,
@@ -152,7 +120,6 @@ impl Display for Markers {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str = match self {
             Markers::Point => ".".to_string(),
-            Markers::Line => "-".to_string(),
             Markers::Circle => "o".to_string(),
             Markers::Pixel => ",".to_string(),
             Markers::TriangleDown => "v".to_string(),
@@ -221,6 +188,24 @@ pub enum PlotScale {
     Log,
 }
 
+#[derive(Debug, Copy, Clone, Hash, PartialOrd, PartialEq, Eq)]
+pub enum PlotType {
+    Scatter,
+    Line,
+    Bar,
+}
+
+impl Display for PlotType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            PlotType::Scatter => "scatter".to_string(),
+            PlotType::Line => "line".to_string(),
+            PlotType::Bar => "bar".to_string(),
+        };
+        write!(f, "{}", str)
+    }
+}
+
 pub trait Plot {
     fn set_domain(&mut self, x: Vec<f64>) -> &mut Self;
     fn insert_image(&mut self, y: Vec<f64>) -> &mut Self;
@@ -238,12 +223,13 @@ pub trait Plot {
     fn set_fig_size(&mut self, fig_size: (usize, usize)) -> &mut Self;
     fn set_dpi(&mut self, dpi: usize) -> &mut Self;
     fn grid(&mut self, grid: Grid) -> &mut Self;
-    fn set_marker(&mut self, styles: Vec<Markers>) -> &mut Self;
+    fn set_marker(&mut self, styles: Vec<(usize, Markers)>) -> &mut Self;
     fn set_style(&mut self, style: PlotStyle) -> &mut Self;
     fn tight_layout(&mut self) -> &mut Self;
-    fn set_line_style(&mut self, style: Vec<LineStyle>) -> &mut Self;
-    fn set_color(&mut self, color: Vec<&str>) -> &mut Self;
-    fn set_alpha(&mut self, alpha: Vec<f64>) -> &mut Self;
+    fn set_line_style(&mut self, style: Vec<(usize, LineStyle)>) -> &mut Self;
+    fn set_color(&mut self, color: Vec<(usize, &str)>) -> &mut Self;
+    fn set_alpha(&mut self, alpha: Vec<(usize, f64)>) -> &mut Self;
+    fn set_plot_type(&mut self, plot_type: Vec<(usize, PlotType)>) -> &mut Self;
     fn savefig(&self) -> PyResult<()>;
 }
 
@@ -260,16 +246,17 @@ pub struct Plot2D {
     xlim: Option<(f64, f64)>,
     ylim: Option<(f64, f64)>,
     legends: Vec<String>,
-    markers: Vec<Markers>,
-    line_style: Vec<LineStyle>,
-    color: Vec<String>,
-    alpha: Vec<f64>,
+    markers: Vec<(usize, Markers)>,
+    line_style: Vec<(usize, LineStyle)>,
+    color: Vec<(usize, String)>,
+    alpha: Vec<(usize, f64)>,
     path: String,
     fig_size: Option<(usize, usize)>,
     dpi: usize,
     grid: Grid,
     style: PlotStyle,
     tight: bool,
+    plot_type: Vec<(usize, PlotType)>,
     options: HashMap<PlotOptions, bool>,
 }
 
@@ -303,6 +290,7 @@ impl Plot2D {
             grid: On,
             style: PlotStyle::Default,
             tight: false,
+            plot_type: vec![],
             options: default_options,
         }
     }
@@ -403,7 +391,7 @@ impl Plot for Plot2D {
         self
     }
 
-    fn set_marker(&mut self, styles: Vec<Markers>) -> &mut Self {
+    fn set_marker(&mut self, styles: Vec<(usize, Markers)>) -> &mut Self {
         self.markers = styles;
         self
     }
@@ -418,18 +406,23 @@ impl Plot for Plot2D {
         self
     }
 
-    fn set_line_style(&mut self, style: Vec<LineStyle>) -> &mut Self {
+    fn set_line_style(&mut self, style: Vec<(usize, LineStyle)>) -> &mut Self {
         self.line_style = style;
         self
     }
 
-    fn set_color(&mut self, color: Vec<&str>) -> &mut Self {
-        self.color = color.into_iter().map(|x| x.to_owned()).collect();
+    fn set_color(&mut self, color: Vec<(usize, &str)>) -> &mut Self {
+        self.color = color.into_iter().map(|(i, x)| (i, x.to_owned())).collect();
         self
     }
 
-    fn set_alpha(&mut self, alpha: Vec<f64>) -> &mut Self {
+    fn set_alpha(&mut self, alpha: Vec<(usize, f64)>) -> &mut Self {
         self.alpha = alpha;
+        self
+    }
+
+    fn set_plot_type(&mut self, plot_type: Vec<(usize, PlotType)>) -> &mut Self {
+        self.plot_type = plot_type;
         self
     }
 
@@ -493,10 +486,11 @@ impl Plot for Plot2D {
             let ylabel = self.ylabel.clone();
             let legends = self.legends.clone();
             let path = self.path.clone();
-            let markers = self.markers.iter().map(|x| format!("{}", x)).collect::<Vec<String>>();
-            let line_style = self.line_style.iter().map(|x| format!("{}", x)).collect::<Vec<String>>();
+            let markers = self.markers.iter().map(|(i, x)| (i, format!("{}", x))).collect::<Vec<_>>();
+            let line_style = self.line_style.iter().map(|(i, x)| (i, format!("{}", x))).collect::<Vec<_>>();
             let color = self.color.clone();
             let alpha = self.alpha.clone();
+            let plot_type = self.plot_type.clone();
 
             // Global variables to plot
             let globals = vec![("plt", py.import("matplotlib.pyplot")?)].into_py_dict(py);
@@ -571,41 +565,89 @@ impl Plot for Plot2D {
 
             for i in 0..y_length {
                 let mut inner_string = format!("x,y[{}]", i);
-                if !markers.is_empty() {
-                    inner_string.push_str(&format!(",marker=\"{}\"", markers[i])[..]);
+                let is_corresponding_marker = !markers.is_empty() && (markers.iter().any(|(&j, _)| j == i));
+                if is_corresponding_marker {
+                    let marker = markers.iter().find(|(&j, _)| j == i).unwrap().1.as_str();
+                    inner_string.push_str(&format!(",marker=\"{}\"", marker)[..]);
                 }
-                if !line_style.is_empty() {
-                    inner_string.push_str(&format!(",linestyle=\"{}\"", line_style[i])[..]);
+                let is_corresponding_line_style = !line_style.is_empty() && (line_style.iter().any(|(&j, _)| j == i));
+                if is_corresponding_line_style {
+                    let style = line_style.iter().find(|(&j, _)| j == i).unwrap().1.as_str();
+                    inner_string.push_str(&format!(",linestyle=\"{}\"", style)[..]);
                 }
-                if !color.is_empty() {
-                    inner_string.push_str(&format!(",color=\"{}\"", color[i])[..]);
+                let is_corresponding_color = !color.is_empty() && (color.iter().any(|(j, _)| j == &i));
+                if is_corresponding_color {
+                    let color = color.iter().find(|(j, _)| j == &i).unwrap().1.as_str();
+                    inner_string.push_str(&format!(",color=\"{}\"", color)[..]);
                 }
                 if !legends.is_empty() {
                     inner_string.push_str(&format!(",label=r\"{}\"", legends[i])[..]);
                 }
-                if !alpha.is_empty() {
-                    inner_string.push_str(&format!(",alpha={}", alpha[i])[..]);
+                let is_corresponding_alpha = !alpha.is_empty() && (alpha.iter().any(|(j, _)| j == &i));
+                if is_corresponding_alpha {
+                    let alpha = alpha.iter().find(|(j, _)| j == &i).unwrap().1;
+                    inner_string.push_str(&format!(",alpha={}", alpha)[..]);
                 }
-                plot_string.push_str(&format!("plt.plot({})\n", inner_string)[..]);
+                let is_corresponding_plot_type = !plot_type.is_empty() && (plot_type.iter().any(|(j, _)| j == &i));
+                if is_corresponding_plot_type {
+                    let plot_type = plot_type.iter().find(|(j, _)| j == &i).unwrap().1;
+                    match plot_type {
+                        PlotType::Scatter => {
+                            plot_string.push_str(&format!("plt.scatter({})\n", inner_string)[..]);
+                        }
+                        PlotType::Line => {
+                            plot_string.push_str(&format!("plt.plot({})\n", inner_string)[..]);
+                        }
+                        PlotType::Bar => {
+                            plot_string.push_str(&format!("plt.bar({})\n", inner_string)[..]);
+                        }
+                    }
+                } else {
+                    plot_string.push_str(&format!("plt.plot({})\n", inner_string)[..]);
+                }
             }
             for i in 0..pair_length {
                 let mut inner_string = format!("pair[{}][0],pair[{}][1]", i, i);
-                if !markers.is_empty() {
-                    inner_string.push_str(&format!(",marker=\"{}\"", markers[i + y_length])[..]);
+                let is_corresponding_marker = !markers.is_empty() && (markers.iter().any(|(&j, _)| j == (i + y_length)));
+                if is_corresponding_marker {
+                    let marker = markers.iter().find(|(&j, _)| j == (i + y_length)).unwrap().1.as_str();
+                    inner_string.push_str(&format!(",marker=\"{}\"", marker)[..]);
                 }
-                if !line_style.is_empty() {
-                    inner_string.push_str(&format!(",linestyle=\"{}\"", line_style[i + y_length])[..]);
+                let is_corresponding_line_style = !line_style.is_empty() && (line_style.iter().any(|(&j, _)| j == (i + y_length)));
+                if is_corresponding_line_style {
+                    let style = line_style.iter().find(|(&j, _)| j == (i + y_length)).unwrap().1.as_str();
+                    inner_string.push_str(&format!(",linestyle=\"{}\"", style)[..]);
                 }
-                if !color.is_empty() {
-                    inner_string.push_str(&format!(",color=\"{}\"", color[i + y_length])[..]);
+                let is_corresponding_color = !color.is_empty() && (color.iter().any(|(j, _)| j == &(i + y_length)));
+                if is_corresponding_color {
+                    let color = color.iter().find(|(j, _)| j == &(i + y_length)).unwrap().1.as_str();
+                    inner_string.push_str(&format!(",color=\"{}\"", color)[..]);
                 }
                 if !legends.is_empty() {
                     inner_string.push_str(&format!(",label=r\"{}\"", legends[i + y_length])[..]);
                 }
-                if !alpha.is_empty() {
-                    inner_string.push_str(&format!(",alpha={}", alpha[i + y_length])[..]);
+                let is_corresponding_alpha = !alpha.is_empty() && (alpha.iter().any(|(j, _)| j == &(i + y_length)));
+                if is_corresponding_alpha {
+                    let alpha = alpha.iter().find(|(j, _)| j == &(i + y_length)).unwrap().1;
+                    inner_string.push_str(&format!(",alpha={}", alpha)[..]);
                 }
-                plot_string.push_str(&format!("plt.plot({})\n", inner_string)[..]);
+                let is_corresponding_plot_type = !plot_type.is_empty() && (plot_type.iter().any(|(j, _)| j == &(i + y_length)));
+                if is_corresponding_plot_type {
+                    let plot_type = plot_type.iter().find(|(j, _)| j == &(i + y_length)).unwrap().1;
+                    match plot_type {
+                        PlotType::Scatter => {
+                            plot_string.push_str(&format!("plt.scatter({})\n", inner_string)[..]);
+                        }
+                        PlotType::Line => {
+                            plot_string.push_str(&format!("plt.plot({})\n", inner_string)[..]);
+                        }
+                        PlotType::Bar => {
+                            plot_string.push_str(&format!("plt.bar({})\n", inner_string)[..]);
+                        }
+                    }
+                } else {
+                    plot_string.push_str(&format!("plt.plot({})\n", inner_string)[..]);
+                }
             }
 
             if self.tight {

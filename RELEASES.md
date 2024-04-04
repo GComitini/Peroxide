@@ -1,3 +1,20 @@
+# Release 0.35.1 (2024-03-29)
+
+- Add `PlotType` for `Plot2D`
+  - `PlotType::Scatter`
+  - `PlotType::Line` (default)
+  - `PlotType::Bar`
+
+# Release 0.35.0 (2024-03-29)
+
+## Change some plot functions
+
+- Now you can set marker, line style, color, alpha option for specific element.
+  - `set_marker(vec![(usize, Marker)])` : `usize` is index of element (image or pair)
+  - `set_line_style(vec![(usize, LineStyle)])`
+  - `set_color(vec![(usize, String)])`
+  - `set_alpha(vec![(usize, f64)])`
+
 # Release 0.34.7 (2024-03-11)
 
 ## More updates for `plot` feature
