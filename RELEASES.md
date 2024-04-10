@@ -1,3 +1,46 @@
+# Release 0.36.2 (2024-04-10)
+
+- Now, you can report current states if your constraints are violated.
+  - `ODEError::ConstraintViolation` -> `ODEError::ConstraintViolation(f64, Vec<f64>, Vec<f64>)`
+  - for detailed information, see [docs for ODEError](https://axect.github.io/Peroxide_Doc/peroxide/numerical/ode/enum.ODEError.html)
+- Add docs for `ODEError`
+
+# Release 0.36.1 (2024-04-09)
+
+- Fix all warnings in peroxide
+- Change redundant method
+  - `Vec<f64>::resize` -> `Vec<f64>::reshape`
+- Error handling for concatenation
+  - `cbind` & `rbind` now returns `Result<Matrix, ConcatenateError>`
+- New non-macro utils
+  - `column_stack(&[Vec<f64>]) -> Result<Matrix, ConcatenateError>`
+  - `row_stack(&[Vec<f64>]) -> Result<Matrix, ConcatenateError>`
+  - `rand_with_rng(usize, usize, &mut Rng) -> Matrix`
+- Generic Butcher tableau trait (now for embedded Runge-Kutta methods)
+
+  ```rust
+  pub trait ButcherTableau {
+      const C: &'static [f64];
+      const A: &'static [&'static [f64]];
+      const BH: &'static [f64];
+      const BL: &'static [f64];
+  
+      fn tol(&self) -> f64;
+      fn safety_factor(&self) -> f64;
+      fn max_step_size(&self) -> f64;
+      fn min_step_size(&self) -> f64;
+      fn max_step_iter(&self) -> usize;
+  }
+  ```
+
+  - Implement `ODEIntegrator` for `ButcherTableau`
+    - Just declare `ButcherTableau` then `step` is free
+
+  - Three available embedded Runge-Kutta methods
+    - `RKF45`: Runge-Kutta-Fehlberg 4/5th order
+    - `DP45`: Dormand-Prince 4/5th order
+    - `TSIT45`: Tsitouras 4/5th order
+
 # Release 0.36.0 (2024-04-08)
 
 ## Huge Update - Error handling & Whole new ODE
