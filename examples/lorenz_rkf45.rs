@@ -2,7 +2,7 @@ use peroxide::fuga::*;
 
 #[allow(unused_variables)]
 fn main() -> Result<(), Box<dyn Error>> {
-    let rkf45 = RKF45::new(1e-4, 0.9, 1e-6, 1e-1, 100);
+    let rkf45 = RKF45::new(1e-4, 0.9, 1e-6, 1e-2, 100);
     let basic_ode_solver = BasicODESolver::new(rkf45);
     let (_, y_vec) = basic_ode_solver.solve(
         &Lorenz,
@@ -38,7 +38,7 @@ impl ODEProblem for Lorenz {
         vec![10f64, 1f64, 1f64]
     }
 
-    fn rhs(&self, _t: f64, y: &[f64], dy: &mut [f64]) -> Result<(), ODEError> {
+    fn rhs(&self, _t: f64, y: &[f64], dy: &mut [f64]) -> anyhow::Result<()> {
         dy[0] = 10f64 * (y[1] - y[0]);
         dy[1] = 28f64 * y[0] - y[1] - y[0] * y[2];
         dy[2] = -8f64 / 3f64 * y[2] + y[0] * y[1];
