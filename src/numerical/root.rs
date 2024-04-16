@@ -39,7 +39,8 @@
 //!
 //!   - Type Parameters: `I=1, O=1, T=(f64, f64)`
 //!
-//! - `BroydenMethod` (unimplemented): Implements Broyden's method for finding roots of systems of nonlinear equations.
+//! - `BroydenMethod`: Implements Broyden's method for finding roots of systems of nonlinear equations.
+//!   It requires an two initial guesses for the first step. (not an interval, just two points)
 //!
 //!   - Type Parameters: `I>=1, O>=1, T=([f64; I], [f64; I])`
 //!
@@ -49,6 +50,47 @@
 //! - `Intv<const N: usize>`: Represents an interval in I-dimensional space. (`([f64; N], [f64; N])`)
 //! - `Jaco<const R: usize, const C: usize>`: Represents the Jacobian matrix of a function. (`[[f64; C]; R]`)
 //! - `Hess<const R: usize, const C: usize>`: Represents the Hessian matrix of a function. (`[[[f64; C]; C]; R]`)
+//!
+//! ## High-level macros
+//!
+//! Peroxide also provides high-level macros for root finding.
+//! Assume `f: fn(f64) -> f64`.
+//!
+//! - `bisection!(f, (a,b), max_iter, tol)`
+//! - `newton!(f, x0, max_iter, tol)`: (**Caution**: newton macro requires `#[ad_function]` attribute)
+//! - `secant!(f, (x0, x1), max_iter, tol)`
+//! - `false_position!(f, (a,b), max_iter, tol)`
+//!
+//! ```rust
+//! #[macro_use]
+//! extern crate peroxide;
+//! use peroxide::fuga::*;
+//! use anyhow::Result;
+//! 
+//! fn main() -> Result<()> {
+//!     let root_bisect = bisection!(f, (0.0, 2.0), 100, 1e-6);
+//!     let root_newton = newton!(f, 0.0, 100, 1e-6);
+//!     let root_false_pos = false_position!(f, (0.0, 2.0), 100, 1e-6);
+//!     let root_secant = secant!(f, (0.0, 2.0), 100, 1e-6);
+//! 
+//!     println!("root_bisect: {}", root_bisect);
+//!     println!("root_newton: {}", root_newton);
+//!     println!("root_false_pos: {}", root_false_pos);
+//!     println!("root_secant: {}", root_secant);
+//! 
+//!     assert!(f(root_bisect).abs() < 1e-6);
+//!     assert!(f(root_newton).abs() < 1e-6);
+//!     assert!(f(root_false_pos).abs() < 1e-6);
+//!     assert!(f(root_secant).abs() < 1e-6);
+//! 
+//!     Ok(())
+//! }
+//! 
+//! #[ad_function]
+//! fn f(x: f64) -> f64 {
+//!     (x - 1f64).powi(3)
+//! }
+//! ```
 //!
 //! ## Examples
 //!
@@ -172,6 +214,158 @@
 //! This leads to the `NewtonMethod` returning a `RootError::ZeroDerivative` error, which is handled in the example.
 use anyhow::{Result, bail};
 
+use crate::traits::math::{Normed, Norm, LinearOp};
+use crate::traits::sugar::{ConvToMat, VecOps};
+use crate::util::non_macro::zeros;
+
+// ┌─────────────────────────────────────────────────────────┐
+//  High level macro
+// └─────────────────────────────────────────────────────────┘
+/// High level macro for bisection
+///
+/// # Arguments
+///
+/// - `f`: `fn(f64) -> f64`
+/// - `(a, b)`: `(f64, f64)`
+/// - `max_iter`: `usize`
+/// - `tol`: `f64`
+#[macro_export]
+macro_rules! bisection {
+    ($f:ident, ($a:expr, $b:expr), $max_iter:expr, $tol:expr) => {{
+        struct BisectionProblem;
+
+        impl RootFindingProblem<1, 1, (f64, f64)> for BisectionProblem {
+            fn initial_guess(&self) -> (f64, f64) {
+                ($a, $b)
+            }
+
+            fn function(&self, x: [f64; 1]) -> Result<[f64; 1]> {
+                Ok([$f(x[0])])
+            }
+        }
+
+        let problem = BisectionProblem;
+        let bisection = BisectionMethod { max_iter: $max_iter, tol: $tol };
+        let root = bisection.find(&problem)?;
+        root[0]
+    }}
+}
+
+/// High level macro for newton (using Automatic differentiation)
+///
+/// # Requirements
+///
+/// - This macro requires the function with `ad_function`
+///
+///   ```rust
+///   use peroxide::fuga::*;
+///
+///   #[ad_function]
+///   fn f(x: f64) -> f64 {
+///       (x - 1f64).powi(3)
+///   }
+///   ```
+///
+/// # Arguments
+///
+/// - `f`: `fn(f64) -> f64`
+/// - `x`: `f64`
+/// - `max_iter`: `usize`
+/// - `tol`: `f64`
+#[macro_export]
+macro_rules! newton {
+    ($f:ident, $x:expr, $max_iter:expr, $tol:expr) => {{
+        use paste::paste;
+        struct NewtonProblem;
+
+        impl RootFindingProblem<1, 1, f64> for NewtonProblem {
+            fn initial_guess(&self) -> f64 {
+                $x 
+            }
+
+            fn function(&self, x: [f64; 1]) -> Result<[f64; 1]> {
+                Ok([$f(x[0])])
+            }
+
+            fn derivative(&self, x: [f64; 1]) -> Result<Jaco<1, 1>> {
+                paste! {
+                    let x_ad = AD1(x[0], 1f64);
+                    Ok([[[<$f _ad>](x_ad).dx()]])
+                }
+            }
+        }
+
+        let problem = NewtonProblem;
+        let newton = NewtonMethod { max_iter: $max_iter, tol: $tol };
+        let root = newton.find(&problem)?;
+        root[0]
+    }}
+}
+
+/// High level macro for false position
+///
+/// # Arguments
+///
+/// - `f`: `fn(f64) -> f64`
+/// - `(a, b)`: `(f64, f64)`
+/// - `max_iter`: `usize`
+/// - `tol`: `f64`
+#[macro_export]
+macro_rules! false_position {
+    ($f:ident, ($a:expr, $b:expr), $max_iter:expr, $tol:expr) => {{
+        struct FalsePositionProblem;
+
+        impl RootFindingProblem<1, 1, (f64, f64)> for FalsePositionProblem {
+            fn initial_guess(&self) -> (f64, f64) {
+                ($a, $b)
+            }
+
+            fn function(&self, x: [f64; 1]) -> Result<[f64; 1]> {
+                Ok([$f(x[0])])
+            }
+        }
+
+        let problem = FalsePositionProblem;
+        let false_position = FalsePositionMethod { max_iter: $max_iter, tol: $tol };
+        let root = false_position.find(&problem)?;
+        root[0]
+    }}
+}
+
+/// High level macro for secant
+///
+/// # Arguments
+///
+/// - `f`: `fn(f64) -> f64`
+/// - `(a, b)`: `(f64, f64)`
+/// - `max_iter`: `usize`
+/// - `tol`: `f64`
+#[macro_export]
+macro_rules! secant {
+    ($f:ident, ($a:expr, $b:expr), $max_iter:expr, $tol:expr) => {{
+        struct SecantProblem;
+
+        impl RootFindingProblem<1, 1, (f64, f64)> for SecantProblem {
+            fn initial_guess(&self) -> (f64, f64) {
+                ($a, $b)
+            }
+
+            fn function(&self, x: [f64; 1]) -> Result<[f64; 1]> {
+                Ok([$f(x[0])])
+            }
+        }
+
+        let problem = SecantProblem;
+        let secant = SecantMethod { max_iter: $max_iter, tol: $tol };
+        let root = secant.find(&problem)?;
+        root[0]
+    }}
+}
+
+
+// ┌─────────────────────────────────────────────────────────┐
+//  Type aliases
+// └─────────────────────────────────────────────────────────┘
 /// Point alias (`[f64; N]`)
 pub type Pt<const N: usize> = [f64; N];
 /// Interval alias (`([f64; N], [f64; N])`)
@@ -181,6 +375,9 @@ pub type Jaco<const R: usize, const C: usize> = [[f64; C]; R];
 /// Hessian alias (`[[[f64; C]; C]; R]`)
 pub type Hess<const R: usize, const C: usize> = [[[f64; C]; C]; R];
 
+// ┌─────────────────────────────────────────────────────────┐
+//  Traits
+// └─────────────────────────────────────────────────────────┘
 /// Trait to define a root finding problem
 ///
 /// # Type Parameters
@@ -242,7 +439,7 @@ pub enum RootError<const I: usize> {
     ZeroSecant(Pt<I>, Pt<I>),
 }
 
-impl std::fmt::Display for RootError<1> {
+impl<const I: usize> std::fmt::Display for RootError<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RootError::NoRoot => write!(f, "There is no root in the interval"),
@@ -345,7 +542,7 @@ impl RootFinder<1, 1, (f64, f64)> for BisectionMethod {
         } else if fb.abs() < self.tol {
             return Ok([b]);
         } else if fa * fb > 0.0 {
-            bail!(RootError::NoRoot);
+            bail!(RootError::<1>::NoRoot);
         }
 
         for _ in 0..self.max_iter {
@@ -361,7 +558,7 @@ impl RootFinder<1, 1, (f64, f64)> for BisectionMethod {
                 a = c;
                 fa = fc;
             } else {
-                bail!(RootError::NoRoot);
+                bail!(RootError::<1>::NoRoot);
             }
         }
         let c = (a + b) / 2.0;
@@ -479,8 +676,9 @@ impl RootFinder<1, 1, (f64, f64)> for SecantMethod {
                 bail!(RootError::ZeroSecant([x0], [x1]));
             }
 
+            let f0_old = f0;
             f0 = f1;
-            (x0, x1) = (x1, x1 - f1 * (x1 - x0) / (f1 - f0))
+            (x0, x1) = (x1, x1 - f1 * (x1 - x0) / (f1 - f0_old))
         }
         bail!(RootError::NotConverge([x1]));
     }
@@ -531,7 +729,7 @@ impl RootFinder<1, 1, (f64, f64)> for FalsePositionMethod {
         } else if fb.abs() < self.tol {
             return Ok([b]);
         } else if fa * fb > 0.0 {
-            bail!(RootError::NoRoot);
+            bail!(RootError::<1>::NoRoot);
         }
 
         for _ in 0..self.max_iter {
@@ -547,7 +745,7 @@ impl RootFinder<1, 1, (f64, f64)> for FalsePositionMethod {
                 a = c;
                 fa = fc;
             } else {
-                bail!(RootError::NoRoot);
+                bail!(RootError::<1>::NoRoot);
             }
         }
         let c = (a * fb - b * fa) / (fb - fa);
@@ -574,13 +772,49 @@ impl RootFinder<1, 1, (f64, f64)> for FalsePositionMethod {
 /// # Caution
 ///
 /// - The function should be differentiable
+///
+/// # Example
+///
+/// ```rust
+/// use peroxide::fuga::*;
+/// use peroxide::numerical::root::{Pt, Intv};
+/// 
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let problem = CircleTangentLine;
+///     let broyden = BroydenMethod { max_iter: 100, tol: 1e-6, rtol: 1e-6 };
+///
+///     let root = broyden.find(&problem)?;
+///     let result = problem.function(root)?;
+///
+///     let norm = result.to_vec().norm(Norm::L2);
+///     assert!(norm < 1e-6);
+///
+///     Ok(())
+/// }
+/// 
+/// struct CircleTangentLine;
+/// 
+/// impl RootFindingProblem<2, 2, Intv<2>> for CircleTangentLine {
+///     fn function(&self, x: Pt<2>) -> anyhow::Result<Pt<2>> {
+///         Ok([
+///             x[0] * x[0] + x[1] * x[1] - 1.0,
+///             x[0] + x[1] - 2f64.sqrt()
+///         ])
+///     }
+/// 
+///     fn initial_guess(&self) -> Intv<2> {
+///         ([0.0, 0.1], [-0.1, 0.2])
+///     }
+/// }
+/// ```
+
 pub struct BroydenMethod {
     pub max_iter: usize,
     pub tol: f64,
+    pub rtol: f64,
 }
 
-
-#[allow(unused_variables)]
+#[allow(unused_variables, non_snake_case)]
 impl<const I: usize, const O: usize> RootFinder<I, O, Intv<I>> for BroydenMethod {
     fn max_iter(&self) -> usize {
         self.max_iter
@@ -592,6 +826,44 @@ impl<const I: usize, const O: usize> RootFinder<I, O, Intv<I>> for BroydenMethod
         &self,
         problem: &P,
     ) -> Result<Pt<I>> {
-        unimplemented!()
+        // Init state
+        let state = problem.initial_guess();
+        let (mut x0, mut x1) = state;
+        let mut fx0 = problem.function(x0)?.to_vec();
+
+        // Initialize negative inverse jacobian as identity
+        // H = -J^{-1}
+        let mut H = zeros(I, O);
+        for i in 0..O.min(I) {
+            H[(i, i)] = 1.0;
+        }
+
+        for _ in 0..self.max_iter {
+            let fx1 = problem.function(x1)?.to_vec();
+            if fx1.norm(Norm::L2) < self.tol {
+                return Ok(x1);
+            }
+            let dx = x1.iter().zip(x0.iter()).map(|(x1, x0)| x1 - x0).collect::<Vec<_>>();
+            if dx.norm(Norm::L2) < self.rtol {
+                return Ok(x1);
+            }
+            let df = fx1.iter().zip(fx0.iter()).map(|(fx1, fx0)| fx1 - fx0).collect::<Vec<_>>();
+
+            let denom = dx.add_v(&H.apply(&df));
+            let right = &dx.to_row() * &H;
+            let num = right.apply(&df)[0];
+
+            let left = denom.div_s(num);
+
+            H = H - left.to_col() * right;
+
+            x0 = x1;
+            fx0 = fx1.clone();
+            let dx_new = H.apply(&fx1);
+            for i in 0..I {
+                x1[i] += dx_new[i];
+            }
+        }
+        bail!(RootError::NotConverge(x1));
     }
 }
