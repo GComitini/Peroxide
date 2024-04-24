@@ -277,6 +277,9 @@ where
                 let c = (a + b) / 2f64;
                 let tol_curr = if method.is_relative() { tol * G } else { tol };
                 if (G - K).abs() < tol_curr || a == b || max_iter == 0 {
+                    if !G.is_finite() {
+                        return G;
+                    }
                     I += G;
                 } else {
                     S.push((a, c, tol / 2f64, max_iter - 1));
@@ -315,6 +318,9 @@ where
                     tol
                 };
                 if (G - K).norm() < tol_curr || a == b || max_iter == 0 {
+                    if !G.is_finite() {
+                        return G;
+                    }
                     I += G;
                 } else {
                     S.push((a, c, tol / 2f64, max_iter - 1));
