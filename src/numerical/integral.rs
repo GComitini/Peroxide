@@ -1,4 +1,5 @@
-use crate::structure::complex::C64;
+#[cfg(feature = "complex")]
+use crate::complex::C64;
 use crate::structure::polynomial::{lagrange_polynomial, Calculus};
 use crate::traits::fp::FPVector;
 use crate::util::non_macro::seq;
@@ -171,6 +172,7 @@ where
     }
 }
 
+#[cfg(feature = "complex")]
 pub fn complex_integrate<F>(f: F, (a, b): (f64, f64), method: Integral) -> C64
 where
     F: Fn(f64) -> C64 + Copy,
@@ -196,6 +198,7 @@ where
     q.eval(b) - q.eval(a)
 }
 
+#[cfg(feature = "complex")]
 pub fn complex_newton_cotes_quadrature<F>(f: F, n: usize, (a, b): (f64, f64)) -> C64
 where
     F: Fn(f64) -> C64,
@@ -235,6 +238,7 @@ where
     (b - a) / 2f64 * unit_gauss_legendre_quadrature(|x| f(x * (b - a) / 2f64 + (a + b) / 2f64), n)
 }
 
+#[cfg(feature = "complex")]
 pub fn complex_gauss_legendre_quadrature<F>(f: F, n: usize, (a, b): (f64, f64)) -> C64
 where
     F: Fn(f64) -> C64,
@@ -292,6 +296,7 @@ where
     I
 }
 
+#[cfg(feature = "complex")]
 #[allow(non_snake_case)]
 pub fn complex_gauss_kronrod_quadrature<F, T, S>(f: F, (a, b): (T, S), method: Integral) -> C64
 where
@@ -340,6 +345,7 @@ where
     (b - a) / 2f64 * unit_kronrod_quadrature(|x| f(x * (b - a) / 2f64 + (a + b) / 2f64), n)
 }
 
+#[cfg(feature = "complex")]
 pub fn complex_kronrod_quadrature<F>(f: F, n: usize, (a, b): (f64, f64)) -> C64
 where
     F: Fn(f64) -> C64,
@@ -362,6 +368,7 @@ where
     s
 }
 
+#[cfg(feature = "complex")]
 fn complex_unit_gauss_legendre_quadrature<F>(f: F, n: usize) -> C64
 where
     F: Fn(f64) -> C64,
@@ -487,6 +494,7 @@ where
     s
 }
 
+#[cfg(feature = "complex")]
 fn complex_unit_kronrod_quadrature<F>(f: F, n: usize) -> C64
 where
     F: Fn(f64) -> C64,

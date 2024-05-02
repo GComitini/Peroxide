@@ -3,16 +3,14 @@ use crate::traits::math::{InnerProduct, Norm, Normed, Vector};
 use crate::traits::sugar::VecOps;
 use num_complex::Complex;
 
-pub type C64 = Complex<f64>;
-
 impl Vector for Complex<f64> {
     type Scalar = Self;
 
-    fn add_vec<'a, 'b>(&'a self, rhs: &'b Self) -> Self {
+    fn add_vec(&self, rhs: &Self) -> Self {
         self + rhs
     }
 
-    fn sub_vec<'a, 'b>(&'a self, rhs: &'b Self) -> Self {
+    fn sub_vec(&self, rhs: &Self) -> Self {
         self - rhs
     }
 
@@ -78,15 +76,15 @@ impl FPVector for Vec<Complex<f64>> {
     where
         F: Fn(Self::Scalar) -> bool,
     {
-        self.into_iter().filter(|&x| f(*x)).map(|&t| t).collect()
+        self.iter().filter(|&x| f(*x)).cloned().collect()
     }
 
     fn take(&self, n: usize) -> Self {
-        self.iter().take(n).map(|&x| x).collect()
+        self.iter().take(n).cloned().collect()
     }
 
     fn skip(&self, n: usize) -> Self {
-        self.iter().skip(n).map(|&x| x).collect()
+        self.iter().skip(n).cloned().collect()
     }
 
     fn sum(&self) -> Self::Scalar {
@@ -101,11 +99,11 @@ impl FPVector for Vec<Complex<f64>> {
 impl Vector for Vec<Complex<f64>> {
     type Scalar = Complex<f64>;
 
-    fn add_vec<'a, 'b>(&'a self, rhs: &'b Self) -> Self {
+    fn add_vec(&self, rhs: &Self) -> Self {
         self.zip_with(|x, y| x + y, rhs)
     }
 
-    fn sub_vec<'a, 'b>(&'a self, rhs: &'b Self) -> Self {
+    fn sub_vec(&self, rhs: &Self) -> Self {
         self.zip_with(|x, y| x - y, rhs)
     }
 
