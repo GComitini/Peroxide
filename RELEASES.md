@@ -1,3 +1,36 @@
+# Release 0.37.9 (2024-07-31)
+
+- Fix inconsistent lambert w function name [#65](https://github.com/Axect/Peroxide/issues/65) (Thanks to [@JSorngard](https://github.com/JSorngard))
+
+# Release 0.37.8 (2024-07-30)
+
+- Integrate with [lambert_w](https://crates.io/crates/lambert_w) crate ([#63](https://github.com/Axect/Peroxide/pull/63)) (Thanks to [@JSorngard](https://github.com/JSorngard))
+  - Write flexible wrapper for [lambert_w](https://crates.io/crates/lambert_w)
+    ```rust
+    pub enum LambertWAccuracyMode {
+        Simple,   // Faster, 24 bits of accuracy
+        Precise,  // Slower, 50 bits of accuracy
+    }
+
+    pub fn lambert_w0(z: f64, mode: LambertWAccuracyMode) -> f64;
+    pub fn lambert_wm1(z: f64, mode: LambertWAccuracyMode) -> f64;
+    ```
+
+  - Write default Lambert W function for `prelude` (Precise as default)
+    ```rust
+    use peroxide::prelude::*;
+
+    fn main() {
+        lambert_w0(1.0).print(); // Same as fuga::lambert_w0(1.0, LambertWAccuracyMode::Simple)
+    }
+    ```
+
+# Release 0.37.7 (2024-07-05)
+
+- Bump `pyo3` dependency to `0.22`
+- Fix plot functions to be compatible with `pyo3`
+- Add B-Spline to README
+
 # Release 0.37.6 (2024-06-19)
 
 ## Huge Spline Change
